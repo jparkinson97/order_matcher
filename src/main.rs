@@ -11,7 +11,6 @@ use crate::order_matcher::matcher::register_sell_order;
 use crate::order_matcher::matcher::process_buy_order;
 
 
-
 fn main() {
     let stdin = io::stdin();
     let mut sell_orders: OrderBook = BTreeMap::new();
@@ -35,7 +34,13 @@ fn main() {
                 register_sell_order(order, &mut sell_orders);
             }
             OrderType::Buy => {
-                process_buy_order(&mut order, &mut sell_orders);
+                let trades = process_buy_order(&mut order, &mut sell_orders);
+                for trade in trades {
+                    println!(
+                        "Trade: {} BTC @ {} USD between {} and {}",
+                        trade.quantity_traded, trade.price, trade.buy_id, trade.sell_id
+                    );
+                }
             }
         }
     }
