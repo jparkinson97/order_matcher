@@ -3,17 +3,21 @@ mod types;
 
 use std::io::{self, BufRead};
 use std::collections::BTreeMap;
+use std::sync::mpsc::{self, Sender, Receiver};
+use std::thread;
 
 use crate::types::order_types::OrderBook;
-use crate::types::order_types::OrderType;
 use crate::types::order_types::Order;
-use crate::order_matcher::matcher::register_sell_order;
-use crate::order_matcher::matcher::process_buy_order;
-
+use crate::order_matcher::matcher::process_orders;
 
 fn main() {
     let stdin = io::stdin();
-    let mut sell_orders: OrderBook = BTreeMap::new();
+    let (order_tx, order_rx): (Sender<Order>, Receiver<Order>) = mpsc::channel();
+
+    let processor_handle = thread::spawn(move || {
+        let mut sell_orders: OrderBook = BTreeMap::new();
+        process_orders(order_rx, &mut sell_orders);
+    });
 
     for line in stdin.lock().lines() {
         let line = line.expect("Failed to read line");
@@ -21,7 +25,7 @@ fn main() {
             continue;
         }
 
-        let mut order = match line.parse::<Order>() {
+        let order = match line.parse::<Order>() {
             Ok(order) => order,
             Err(e) => {
                 eprintln!("Error parsing order: {}", e);
@@ -29,19 +33,14 @@ fn main() {
             }
         };
 
-        match order.order_type {
-            OrderType::Sell => {
-                register_sell_order(order, &mut sell_orders);
-            }
-            OrderType::Buy => {
-                let trades = process_buy_order(&mut order, &mut sell_orders);
-                for trade in trades {
-                    println!(
-                        "Trade: {} BTC @ {} USD between {} and {}",
-                        trade.quantity_traded, trade.price, trade.buy_id, trade.sell_id
-                    );
-                }
-            }
+        if let Err(e) = order_tx.send(order) {
+            eprintln!("Error sending order to processor: {}", e);
+            break;
         }
     }
+
+    drop(order_tx);
+
+    processor_handle.join().expect("Processor thread panicked");
 }
+

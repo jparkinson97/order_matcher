@@ -1,12 +1,34 @@
 
 pub mod matcher {
     use std::collections::VecDeque;
+    use std::sync::mpsc::Receiver;
+
     use crate::types::order_types::Order;
+    use crate::types::order_types::OrderType;
     use crate::types::order_types::OrderBook;
     use crate::types::order_types::Trade;
 
+    pub fn process_orders(order_rx: Receiver<Order>, sell_orders: &mut OrderBook) {
+        for mut order in order_rx {
+            match order.order_type {
+                OrderType::Sell => {
+                    register_sell_order(order, sell_orders);
+                }
+                OrderType::Buy => {
+                    let trades = process_buy_order(&mut order, sell_orders);
+                    for trade in trades {
+                        println!(
+                            "Trade: {} BTC @ {} USD between {} and {}",
+                            trade.quantity_traded, trade.price, trade.buy_id, trade.sell_id
+                        );
+                    }
+                }
+            }
+        }
+    }
 
-    pub fn process_buy_order(buy_order: &mut Order, sell_orders: &mut OrderBook) -> Vec<Trade> {
+
+    fn process_buy_order(buy_order: &mut Order, sell_orders: &mut OrderBook) -> Vec<Trade> {
         let mut prices_to_remove = Vec::new();
         let mut trades = Vec::new();
     
@@ -50,7 +72,7 @@ pub mod matcher {
         trades
     }
     
-    pub fn register_sell_order(sell_order: Order, sell_orders: &mut OrderBook) {
+    fn register_sell_order(sell_order: Order, sell_orders: &mut OrderBook) {
         sell_orders
             .entry(sell_order.price)
             .or_insert_with(VecDeque::new)
